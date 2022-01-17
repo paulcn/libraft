@@ -1,0 +1,168 @@
+
+module raft
+{
+    enum PeerStatus
+    {
+        PS_INIT             = 0,    //初始状态
+        PS_NORMAL           = 1,    //正常状态
+        PS_APPEND_ENTRIES_FAILED        = 2,    //同步数据中断
+        PS_INSTALLING_SNAPSHOT          = 3,    //正在安装快照
+        PS_INSTALLING_SNAPSHOT_SUCC     = 4,    //安装快照失败
+        PS_INSTALLING_SNAPSHOT_FAILED   = 5,    //安装快照失败
+    };
+
+    enum EntryType
+    {
+        ENTRY_TYPE_DATA = 0,
+        ENTRY_TYPE_CONFIGURATION= 1,
+    };
+
+    enum ResCode
+    {
+        RES_CODE_SUCCESS = 0,
+        RES_CODE_FAIL = 1,
+        RES_CODE_NOT_LEADER = 2,
+    };
+    //请求转发标志字符串
+    const string FORWARD_FLAG = "RAFT_FORWARD";
+
+    struct Server
+    {
+        0 optional unsigned int serverId;
+        1 optional string endPoint; //tcp -h 127.0.0.1 -p 20001 -t 60000
+        2 optional string obj;     //raftObj Raft.CounterServer.RaftObj
+        3 optional string bussEndPoint; //tcp -h 127.0.0.1 -p 30001 -t 60000
+        4 optional string bussObj; //bussObj Raft.CounterServer.CountObj
+
+    };
+
+    struct Configuration
+    {
+        0 optional vector<Server> servers;
+    };
+
+    //快照Meta数据
+    struct SnapshotMetaData
+    {
+        0 optional long lastIncludedIndex;
+        1 optional long lastIncludedTerm;
+        2 optional Configuration configuration;
+    };
+
+    //Log元数据日志
+    struct LogMetaData
+    {
+        0 optional long currentTerm     = 0;
+        1 optional long firstLogIndex   = 1;
+        2 optional unsigned int  votedFor        = 0;
+    };
+
+    //注意：如果AppendEntry不包含任何Entry则表示此消息为心跳消息。
+    struct AppendEntriesRequest
+    {
+        0 optional long term;                   //领导人的任期号
+        1 optional unsigned int  serverId;               //领导人的 id，为了其他服务器能重定向到客户端
+        2 optional long prevLogIndex;           //前一个日志的索引值
+        3 optional long prevLogTerm;            //前一个日志的领导人任期号
+        4 optional vector<string> entries;    //将要存储的日志条目（表示 heartbeat 时为空，有时会为了效率发送超过一条）
+        5 optional long leaderCommit;           //领导人提交的日志条目索引值
+    };
+
+    struct AppendEntriesResponse
+    {
+        0 optional ResCode resCode;             //Follower包含了匹配上 prevLogIndex 和 prevLogTerm 的日志时为真
+        1 optional long term;                   //当前的任期号，用于领导人更新自己的任期号
+        2 optional long lastLogIndex;           //如果其它服务器包含能够匹配上 prevLogIndex 和 prevLogTerm 的日志时为真
+    };
+    struct InstallSnapshotRequest
+    {
+        0 optional unsigned int serverId;
+        1 optional long term;
+        2 optional SnapshotMetaData snapshotMetaData;
+        3 optional string fileName;
+        4 optional long offset;
+        5 optional vector<byte> data;
+        6 optional bool isFirst;
+        7 optional bool isLast;
+        8 optional bool isDir = false;
+    };
+
+    struct InstallSnapshotResponse
+    {
+        0 optional ResCode resCode;
+        1 optional long term;
+    };
+
+    struct VoteRequest
+    {
+        0 optional long term;                   //候选人的任期号
+        1 optional unsigned int serverId;         //请求投票的候选人 id
+        2 optional long lastLogIndex;           //候选人最新日志条目的索引值
+        3 optional long lastLogTerm;            //候选人最新日志条目对应的任期号
+    };
+
+    struct VoteResponse
+    {
+        0 optional long term;                   //目前的任期号，用于候选人更新自己
+        1 optional bool voteGranted;            //如果候选人收到选票为 true
+    };
+
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //管理集群相关的接口
+
+    struct GetLeaderResponse
+    {
+        0 optional ResCode resCode;
+        1 optional string resMsg;
+        2 optional string leaderEndpoint;
+    };
+
+    struct GetConfigurationResponse
+    {
+        0 optional ResCode resCode;
+        1 optional string resMsg;
+        2 optional vector<Server> servers;
+        3 optional Server leader;
+    };
+
+    struct PeersRequest
+    {
+         0 optional vector<Server> servers;
+    };
+
+    struct PeersResponse
+    {
+        0 optional ResCode resCode;
+        1 optional string resMsg;
+    };
+
+    interface Raft
+    {
+        ///////////////////////////////////////////////////////////////////////////////////////
+        //Raft节点间相互通信的接口
+
+        void preVote(VoteRequest req, out VoteResponse rsp);
+
+        void requestVote(VoteRequest req, out VoteResponse rsp);
+
+        void appendEntries(AppendEntriesRequest req, out AppendEntriesResponse rsp);
+
+        void installSnapshot(InstallSnapshotRequest request, out InstallSnapshotResponse response);
+
+        ///////////////////////////////////////////////////////////////////////////////////////
+        //管理集群相关的接口
+        GetLeaderResponse getLeader();
+
+        //返回配置
+        GetConfigurationResponse getConfiguration();
+
+        //添加节点
+        void addPeers(PeersRequest req, out PeersResponse rsp);
+
+        //清除未添加成功的peer, addPeer失败的节点通过该函数清除掉
+        void clearAddPeers();
+
+        //删除节点
+        void removePeers(PeersRequest req, out PeersResponse rsp);
+    };
+};

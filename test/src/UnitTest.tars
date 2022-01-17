@@ -1,0 +1,38 @@
+/**
+ * 版本 1.0.0
+ * 修改日期: 2020-04-27
+ * 服务概述:
+ *      通用计数服务, 满足高并发场景下某业务对原子性数据计数操作校验需求
+ * 修改内容:
+ *    1.新增计数器计数接口、计数器查询接口、以及释放计数器接口。
+ */
+module raft
+{
+    enum RetValue
+    {
+        RT_SUCC = 0,            //成功
+        RT_DATA_ERROR  = -1,    //读写数据失败
+        RT_APPLY_ERROR = -2,          //应用数据到存储失败
+    };
+
+    struct CountReq
+    {
+        0 optional  string                  sBusinessName;               // 业务ID，方便跟进问题
+        1 optional  string                  sKey;                        // 当前业务下的计数key
+        2 optional  int                     iNum = 1;                    // 计数num（每次调用计数新增数量）
+        3 optional  long                    tTimestamp = 0;              // 时间戳
+    };
+
+    struct CountRsp
+    {
+        0 optional  int                     iRet;                       // 状态码
+        1 optional  string                  sMsg;                       // 消息内容
+        2 optional  long                    iCount;                     // 当前计数值
+    };
+
+    interface Count
+    {
+        // 创建或计数
+        int count(CountReq req, out CountRsp rsp);
+    };
+};
